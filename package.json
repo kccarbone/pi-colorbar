@@ -1,0 +1,21 @@
+{
+  "name": "colorbar",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "forever -w server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kccarbone/pi-colorbar.git"
+  },
+  "dependencies": {
+    "chalk": "4.1.0",
+    "express": "4.17.1",
+    "i2c-bus": "5.2.0",
+    "lodash": "4.17.15",
+    "loglevel": "1.6.8",
+    "loglevel-plugin-prefix": "0.8.4"
+  }
+}
