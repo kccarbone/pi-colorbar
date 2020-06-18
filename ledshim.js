@@ -3,44 +3,31 @@ const driver = require('./driver');
 const _ = require('lodash');
 const log = require('./simple-logger').getLogger('LEDSHIM');
 
-const MODE_REGISTER = 0x00;
-const FRAME_REGISTER = 0x01;
-const AUTOPLAY1_REGISTER = 0x02;
-const AUTOPLAY2_REGISTER = 0x03;
-const BLINK_REGISTER = 0x05;
-const AUDIOSYNC_REGISTER = 0x06;
-const BREATH1_REGISTER = 0x08;
-const BREATH2_REGISTER = 0x09;
-const SHUTDOWN_REGISTER = 0x0a;
-const GAIN_REGISTER = 0x0b;
-const ADC_REGISTER = 0x0c;
-const CONFIG_BANK = 0x0b;
-const BANK_ADDRESS = 0xfd;
-const AUTOPLAY_MODE = 0x08;
-const AUDIOPLAY_MODE = 0x18;
-const ENABLE_OFFSET = 0x00;
-const BLINK_OFFSET = 0x12;
-const COLOR_OFFSET = 0x24;
-const ENABLE_BITS = [
-  0b00000000,
-  0b10111111,
-  0b00111110,
-  0b00111110,
-  0b00111111,
-  0b10111110,
-  0b00000111,
-  0b10000110,
-  0b00110000,
-  0b00110000,
-  0b00111111,
-  0b10111110,
-  0b00111111,
-  0b10111110,
-  0b01111111,
-  0b11111110,
-  0b01111111,
-  0b00000000
-];
+// Initial frame data defines which LEDs are enabled
+const INIT_FRAME = _.fill(new Array(180), 0);
+INIT_FRAME[1] = 0b00000000;
+INIT_FRAME[2] = 0b10111111;
+INIT_FRAME[3] = 0b00111110;
+INIT_FRAME[4] = 0b00111110;
+INIT_FRAME[5] = 0b00111111;
+INIT_FRAME[6] = 0b10111110;
+INIT_FRAME[7] = 0b00000111;
+INIT_FRAME[8] = 0b10000110;
+INIT_FRAME[9] = 0b00110000;
+INIT_FRAME[10] = 0b00110000;
+INIT_FRAME[11] = 0b00111111;
+INIT_FRAME[12] = 0b10111110;
+INIT_FRAME[13] = 0b00111111;
+INIT_FRAME[14] = 0b10111110;
+INIT_FRAME[15] = 0b01111111;
+INIT_FRAME[16] = 0b11111110;
+INIT_FRAME[17] = 0b01111111;
+INIT_FRAME[18] = 0b00000000;
+
+// Start of PWM data in each frame
+const PWM_OFFSET = 0x24;
+
+// Sequential location of R/G/B values on LEDSHIM
 const PIXEL_MAP = [
   118, 69, 85,
   117, 68, 101,
@@ -75,76 +62,58 @@ const PIXEL_MAP = [
 const scratch1 = _.fill(new Array(84), 0);
 
 const boring1 = [...scratch1];
-boring1[30] = 150;
+boring1[30] = 100;
 boring1[31] = 0;
 boring1[32] = 0;
 
+const scratch2 = _.fill(new Array(84), 0);
+
+const boring2 = [...scratch2];
+boring2[33] = 0;
+boring2[34] = 0;
+boring2[35] = 25;
+
 async function init(address = 0x75, deviceId = 1) {
   log.debug(`Initializing LEDSHIM (0x${address.toString(16)})`);
-  const device = new driver(address, deviceId);
+  const device = await driver.init(address, deviceId);
+  let currentFrame = 0;
 
-  // Soft reboot device
-  await reset();
+  // Initialize all 8 frames
+  _.range(8).forEach(x => initFrame(x));
 
-  // Enable the right bits for this device
-  enableLEDs(0);
-  enableLEDs(1);
-  enableLEDs(2);
-  enableLEDs(3); // TODO: "allframes" method
-  enableLEDs(4);
-  enableLEDs(5);
-  enableLEDs(6);
-  enableLEDs(7);
+  // Start on frame 0
+  device.showFrame(0);
 
-  // Default settings
-  setConfig(MODE_REGISTER, 0); // Picture mode
-  setConfig(AUDIOSYNC_REGISTER, 0); // Audio input
+  log.info('LEDSHIM ready');
 
-  showFrame(0);
-  show(1, boring1);
+  function setPixels(pattern) {
+    const stagingFrame = (currentFrame === 0) ? 1 : 0;
+    show(stagingFrame, pattern);
+  }
+
+  setPixels(boring1);
+  await new Promise(r => setTimeout(r, 1000));
+  setPixels(boring2);
+  await new Promise(r => setTimeout(r, 1000));
+  setPixels(boring1);
 
   function show(frame, pattern) {
+    log.info(`Show patten on frame ${frame}`);
     const arr = _.fill(new Array(144), 0);
     const bytes = pattern.reduce(mapPixels, arr);
 
-    setBank(frame);
-
-    _.chunk(bytes, 32).map((x, i) => {
-      const offset = i * 32;
-      device.writeBlock(COLOR_OFFSET + offset, x);
-    });
-
-    showFrame(frame);
+    device.writeFrame(frame, PWM_OFFSET, bytes);
+    device.showFrame(frame);
+    currentFrame = frame;
   }
 
-
-  function setBank(bankId) {
-    device.writeBlock(BANK_ADDRESS, [bankId]);
-  }
-
-  function setConfig(configAddress, configValue) {
-    setBank(CONFIG_BANK);
-    device.writeBlock(configAddress, [configValue]);
-  }
-
-  function enableLEDs(frame) {
-    setBank(frame);
-    device.writeBlock(0, ENABLE_BITS);
-  }
-
-  function showFrame(frame) {
-    setConfig(FRAME_REGISTER, frame);
+  function initFrame(frame) {
+    device.writeFrame(frame, 0, INIT_FRAME);
   }
 
   function mapPixels(array, value, index) {
     array[PIXEL_MAP[index]] = value;
     return array;
-  }
-
-  async function reset() {
-    setConfig(SHUTDOWN_REGISTER, 0)
-    await new Promise(r => setTimeout(r, 10));
-    setConfig(SHUTDOWN_REGISTER, 1);
   }
 
   function setPixel(n, r, g, b) {
