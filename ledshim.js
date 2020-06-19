@@ -5,24 +5,23 @@ const log = require('./simple-logger').getLogger('LEDSHIM');
 
 // Initial frame data defines which LEDs are enabled
 const INIT_FRAME = _.fill(new Array(180), 0);
-INIT_FRAME[1] = 0b00000000;
-INIT_FRAME[2] = 0b10111111;
-INIT_FRAME[3] = 0b00111110;
-INIT_FRAME[4] = 0b00111110;
-INIT_FRAME[5] = 0b00111111;
-INIT_FRAME[6] = 0b10111110;
-INIT_FRAME[7] = 0b00000111;
-INIT_FRAME[8] = 0b10000110;
-INIT_FRAME[9] = 0b00110000;
-INIT_FRAME[10] = 0b00110000;
-INIT_FRAME[11] = 0b00111111;
-INIT_FRAME[12] = 0b10111110;
-INIT_FRAME[13] = 0b00111111;
-INIT_FRAME[14] = 0b10111110;
-INIT_FRAME[15] = 0b01111111;
-INIT_FRAME[16] = 0b11111110;
-INIT_FRAME[17] = 0b01111111;
-INIT_FRAME[18] = 0b00000000;
+INIT_FRAME[0x0] = 0b00000000;
+INIT_FRAME[0x1] = 0b10111111;
+INIT_FRAME[0x2] = 0b00111110;
+INIT_FRAME[0x3] = 0b00111110;
+INIT_FRAME[0x4] = 0b00111111;
+INIT_FRAME[0x5] = 0b10111110;
+INIT_FRAME[0x6] = 0b00000111;
+INIT_FRAME[0x7] = 0b10000110;
+INIT_FRAME[0x8] = 0b00110000;
+INIT_FRAME[0x9] = 0b00110000;
+INIT_FRAME[0xA] = 0b00111111;
+INIT_FRAME[0xB] = 0b10111110;
+INIT_FRAME[0xC] = 0b00111111;
+INIT_FRAME[0xD] = 0b10111110;
+INIT_FRAME[0xE] = 0b01111111;
+INIT_FRAME[0xF] = 0b11111110;
+INIT_FRAME[0x10] = 0b01111111;
 
 // Start of PWM data in each frame
 const PWM_OFFSET = 0x24;
@@ -59,56 +58,48 @@ const PIXEL_MAP = [
   13, 77, 93
 ];
 
-const scratch1 = _.fill(new Array(84), 0);
-
-const boring1 = [...scratch1];
-boring1[30] = 100;
-boring1[31] = 0;
-boring1[32] = 0;
-
-const scratch2 = _.fill(new Array(84), 0);
-
-const boring2 = [...scratch2];
-boring2[33] = 0;
-boring2[34] = 0;
-boring2[35] = 25;
-
 async function init(address = 0x75, deviceId = 1) {
   log.debug(`Initializing LEDSHIM (0x${address.toString(16)})`);
   const device = await driver.init(address, deviceId);
   let currentFrame = 0;
 
   // Initialize all 8 frames
-  _.range(8).forEach(x => initFrame(x));
+  for (let i = 0; i < 8; i++) {
+    await initFrame(i);
+  }
 
   // Start on frame 0
-  device.showFrame(0);
+  await device.showFrame(0);
 
   log.info('LEDSHIM ready');
 
-  function setPixels(pattern) {
+  // Pattern format: [{ r: 255, g: 255, b: 255, n: [1,2,3,...] }, {...}]
+  async function setPixels(pattern) {
     const stagingFrame = (currentFrame === 0) ? 1 : 0;
-    show(stagingFrame, pattern);
+    const sequence = _.fill(new Array(84), 0);
+
+    pattern.forEach(x => {
+      x.n.forEach(y => {
+        sequence[y * 3 + 0] = x.r;
+        sequence[y * 3 + 1] = x.g;
+        sequence[y * 3 + 2] = x.b;
+      });
+    });
+
+    await show(stagingFrame, sequence);
   }
 
-  setPixels(boring1);
-  await new Promise(r => setTimeout(r, 1000));
-  setPixels(boring2);
-  await new Promise(r => setTimeout(r, 1000));
-  setPixels(boring1);
-
-  function show(frame, pattern) {
-    log.info(`Show patten on frame ${frame}`);
+  async function show(frame, sequence) {
     const arr = _.fill(new Array(144), 0);
-    const bytes = pattern.reduce(mapPixels, arr);
+    const bytes = sequence.reduce(mapPixels, arr);
 
-    device.writeFrame(frame, PWM_OFFSET, bytes);
-    device.showFrame(frame);
+    await device.writeFrame(frame, PWM_OFFSET, bytes);
+    await device.showFrame(frame);
     currentFrame = frame;
   }
 
-  function initFrame(frame) {
-    device.writeFrame(frame, 0, INIT_FRAME);
+  async function initFrame(frame) {
+    await device.writeFrame(frame, 0, INIT_FRAME);
   }
 
   function mapPixels(array, value, index) {
@@ -116,12 +107,8 @@ async function init(address = 0x75, deviceId = 1) {
     return array;
   }
 
-  function setPixel(n, r, g, b) {
-    //device.writeBlock(1, [2]);
-  };
-
   return {
-    setPixel
+    setPixels
   };
 }
 

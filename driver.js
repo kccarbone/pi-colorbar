@@ -25,9 +25,9 @@ async function init(address, deviceId = 1) {
 
   if (fs.existsSync(`/dev/i2c-${deviceId}`)) {
     try {
-      log.debug(`Opening i2c-${deviceId}...`);
+      log.info(`Opening i2c-${deviceId}...`);
       const i2cBus = require('i2c-bus');
-      bus = i2cBus.openSync(deviceId);
+      bus = await i2cBus.openPromisified(deviceId);
     }
     catch (e) {
       log.error('Unable to open i2c device!');
@@ -36,7 +36,7 @@ async function init(address, deviceId = 1) {
   else {
     log.warn('i2c device not available! Running in mock mode...');
     bus = {
-      writeI2cBlockSync: () => { }
+      writeI2cBlock: () => Promise.resolve()
     };
   }
 
@@ -44,29 +44,30 @@ async function init(address, deviceId = 1) {
   await reset();
 
   // Default settings
-  setConfig(MODE_REGISTER, 0); // Picture mode
-  setConfig(AUDIOSYNC_REGISTER, 0); // Audio input
+  await setConfig(MODE_REGISTER, 0); // Picture mode
+  await setConfig(AUDIOSYNC_REGISTER, 0); // Audio input
 
-  function setBank(bankId) {
-    writeBlock(BANK_ADDRESS, [bankId]);
+  async function setBank(bankId) {
+    await writeBlock(BANK_ADDRESS, [bankId]);
   }
 
-  function setConfig(configAddress, configValue) {
-    setBank(CONFIG_BANK);
-    writeBlock(configAddress, [configValue]);
+  async function setConfig(configAddress, configValue) {
+    await setBank(CONFIG_BANK);
+    await writeBlock(configAddress, [configValue]);
   }
 
-  function showFrame(frame) {
-    setConfig(FRAME_REGISTER, frame);
+  async function showFrame(frame) {
+    log.debug(`Show frame ${frame}`);
+    await setConfig(FRAME_REGISTER, frame);
   }
 
-  function writeBlock(offset, data) {
+  async function writeBlock(offset, data) {
     try {
-      _.chunk(data, 32).forEach((x, i) => {
+      _.chunk(data, 32).forEach(async (x, i) => {
         const cursor = (i * 32) + offset;
         const bytes = Buffer.from(x);
-        log.debug(`WRITE (${hex(address)}): ${hex(cursor)} - ${JSON.stringify(x)}`);
-        bus.writeI2cBlockSync(address, cursor, bytes.length, bytes);
+        //log.debug(`WRITE (${hex(address)}): ${hex(cursor)} - ${JSON.stringify(x)}`);
+        await bus.writeI2cBlock(address, cursor, bytes.length, bytes);
       });
     }
     catch (e) {
@@ -74,15 +75,21 @@ async function init(address, deviceId = 1) {
     }
   };
 
-  function writeFrame(frame, offset, data) {
-    setBank(frame);
-    writeBlock(offset, data);
+  async function writeFrame(frame, offset, data) {
+    log.debug(`Write ${data.length} bytes of data to frame ${frame}, offset ${hex(offset)}`);
+    await setBank(frame);
+    await writeBlock(offset, data);
   }
 
   async function reset() {
-    setConfig(SHUTDOWN_REGISTER, 0)
-    await new Promise(r => setTimeout(r, 10));
-    setConfig(SHUTDOWN_REGISTER, 1);
+    await setConfig(SHUTDOWN_REGISTER, 0)
+    await sleep(10);
+    await setConfig(SHUTDOWN_REGISTER, 1);
+  }
+
+  function sleep(ms) {
+    log.debug(`Sleep for ${ms}ms`);
+    return new Promise(r => setTimeout(r, ms))
   }
 
   function hex(int, size = 2) {
@@ -90,7 +97,6 @@ async function init(address, deviceId = 1) {
   }
 
   return {
-    writeBlock,
     writeFrame,
     showFrame,
   };
