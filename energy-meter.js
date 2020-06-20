@@ -6,6 +6,7 @@ const usageBri = 50;
 const solarBri = 30;
 const pulse = [3, 8, 20, 120, 5];
 let overpower = false;
+let flash = false;
 let usage = 0;
 let solar = 0;
 let edge = -9;
@@ -14,30 +15,28 @@ let leds;
 // Bar layout:
 // 0000000000111111111122222222
 // 0123456789012345678901234567
-// *----------------|----------
-// s    <usage>    mid <solar>
-// 1      16        1    10
+// ------------------|---------
+//     <usage>      mid <solar>
+//       18          1     9
 
 async function runLoop() {
   const sequence = new Array(84);
   edge = nextStep();
+  flash = !flash;
 
   for (let i = 0; i < 28; i++) {
     let pwm = [0, 0, 0];
 
-    if (i === 0) {
-      pwm = statusIndicator();
-    }
-    else if (i < 17 && i >= (17 - usage)) {
+    if (i < 18 && i >= (18 - usage)) {
       pwm[0] = pulseLight(edge, i);
-      pwm[2] = usageBri;
+      pwm[2] = colorFill(1, i);
     }
-    else if (i === 17) {
+    else if (i === 18) {
       pwm = midpoint();
     }
-    else if (i > 17 && i <= (solar + 17)) {
+    else if (i > 18 && i <= (solar + 18)) {
       pwm[0] = pulseLight(edge, i);
-      pwm[1] = solarBri;
+      pwm[1] = colorFill(2, i);
     }
 
     sequence[i * 3 + 0] = pwm[0];
@@ -49,12 +48,19 @@ async function runLoop() {
   setTimeout(runLoop, interval);
 }
 
-function statusIndicator() {
-  return [0, 0, 0];
-}
-
 function midpoint() {
   return [50, 40, 20];
+}
+
+function colorFill(type, i) {
+  if (type === 1) {
+    return (usage > 18 && i === 0 && flash)
+      ? usageBri * 2 : usageBri;
+  }
+  else {
+    return (solar > 9 && i === 27 && flash)
+      ? solarBri * 2 : solarBri;
+  }
 }
 
 function pulseLight(edge, i) {
