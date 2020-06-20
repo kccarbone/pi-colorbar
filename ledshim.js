@@ -80,12 +80,19 @@ async function init(address = 0x75, deviceId = 1) {
 
     pattern.forEach(x => {
       x.n.forEach(y => {
-        sequence[y * 3 + 0] = x.r;
-        sequence[y * 3 + 1] = x.g;
-        sequence[y * 3 + 2] = x.b;
+        if (y >= 0 && y < 28) {
+          sequence[y * 3 + 0] = x.r;
+          sequence[y * 3 + 1] = x.g;
+          sequence[y * 3 + 2] = x.b;
+        }
       });
     });
 
+    await show(stagingFrame, sequence);
+  }
+
+  async function setSequence(sequence) {
+    const stagingFrame = (currentFrame === 0) ? 1 : 0;
     await show(stagingFrame, sequence);
   }
 
@@ -108,7 +115,8 @@ async function init(address = 0x75, deviceId = 1) {
   }
 
   return {
-    setPixels
+    setPixels,
+    setSequence
   };
 }
 

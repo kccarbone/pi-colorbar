@@ -4,6 +4,7 @@ const server = require('http').Server(app);
 const bodyParser = require('body-parser');
 const ledshim = require('./ledshim');
 const log = require('./simple-logger').getLogger('Server');
+const energyMeter = require('./energy-meter');
 const port = process.env.PORT || 80;
 const ledsReady = { r: 50, g: 0, b: 0, n: [27] };
 const serverReady = { r: 0, g: 25, b: 0, n: [26] };
@@ -18,7 +19,7 @@ app.get('/status', (req, res) => {
 
 // Update LED indicator
 app.post('/leds', async (req, res) => {
-  log.info('LED update request2: ', JSON.stringify(req.body));
+  log.info('LED update request: ', JSON.stringify(req.body));
   await leds.setPixels(req.body);
   res.send({ op: 'success' });
 });
@@ -30,6 +31,7 @@ ledshim.init().then(device => {
     server.listen(port, callback => {
       log.info(`Server running on port ${port}`);
       leds.setPixels([ledsReady, serverReady]);
+      energyMeter.register(app, leds);
     });
   });
 });

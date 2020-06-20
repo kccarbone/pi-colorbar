@@ -11,7 +11,7 @@ const colors = {
   ERROR: chalk.red,
 };
 
-logger.setLevel(logger.levels.DEBUG);
+logger.setLevel(process.env.LOGLEVEL || logger.levels.INFO);
 prefix.reg(logger);
 prefix.apply(logger, {
   format(level, name, timestamp) {

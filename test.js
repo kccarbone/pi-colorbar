@@ -21,5 +21,31 @@ async function test() {
   ];
 
   const leds = await ledshim.init();
-  await leds.setPixels(test);
+  //await leds.setPixels(test);
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  const pulse = [3, 8, 25, 120, 5];
+  const interval = 75;
+  let edge = -5;
+
+  while (true) {
+    const pattern = [
+      { r: pulse[0], g: 0, b: 0, n: [edge + 0] },
+      { r: pulse[1], g: 0, b: 0, n: [edge + 1] },
+      { r: pulse[2], g: 0, b: 0, n: [edge + 2] },
+      { r: pulse[3], g: 0, b: 0, n: [edge + 3] },
+      { r: pulse[4], g: 0, b: 0, n: [edge + 4] }
+    ];
+
+    await leds.setPixels(pattern);
+    await sleep(interval);
+    edge++;
+
+    if (edge > 30) {
+      edge = -5;
+    }
+  }
+
+
 }
